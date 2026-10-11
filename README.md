@@ -8,6 +8,34 @@ sender -> POST /webhooks/:source -> verify HMAC + timestamp -> claim event id (i
        -> 202 -> queue -> worker -> POST each target (signed) -> retry with backoff -> dead
 ```
 
+## Architecture
+
+```mermaid
+flowchart TD
+    Sender["Webhook sender (e.g. Stripe)<br/>POST /webhooks/:source<br/>x-signature, x-timestamp, x-event-id"] --> WC
+
+    subgraph Nest["NestJS app · AppModule.register()"]
+        WC["WebhooksController"] --> Verify["verify() · signature.ts<br/>HMAC-SHA256 over timestamp.rawBody<br/>±5 min window, constant-time compare"]
+        Verify -- "unknown source / bad sig / stale" --> R401["401"]
+        Verify -- "ok" --> Claim["IdempotencyStore.claim(source:eventId)"]
+        Claim -- "already seen" --> R200["200 duplicate"]
+        Claim -- "first time" --> Fan["DeliveryService.fanOut()<br/>one Delivery per TARGET_URL"]
+        Fan --> R202["202 Accepted"]
+        Fan -- "enqueue deliveryId" --> Q["JobQueue · queue.ts<br/>BullQueue when REDIS_URL is set<br/>InMemoryQueue in tests"]
+        Q -- "job + attempt n" --> Worker["DeliveryService.handle()"]
+        Worker -- "throws: retry with<br/>equal-jitter backoff" --> Q
+        Worker --> Send["FetchSender<br/>signed outbound headers,<br/>x-delivery-id, x-event-id, timeout"]
+        Fan --> DS[("DeliveryStore (in memory)<br/>pending · retrying · delivered · dead")]
+        Worker -- "update status;<br/>dead after MAX_ATTEMPTS" --> DS
+        DC["DeliveriesController<br/>GET /deliveries?status=dead<br/>GET /deliveries/:id"] --> Admin{"AdminGuard · x-admin-key<br/>empty key keeps it closed"}
+        Admin --> DS
+    end
+
+    Send --> Targets["Your services (TARGET_URLS)"]
+    Claim -.-> Redis[("Redis<br/>SET NX EX idem:* keys<br/>BullMQ queue")]
+    Q -.-> Redis
+```
+
 ## What it demonstrates
 
 | Concern | How |
@@ -52,7 +80,18 @@ curl -i localhost:3000/webhooks/stripe -H "content-type: application/json" \
 ## Verified here
 
 17 unit and e2e tests pass. The 2 Redis integration tests pass against a local `redis-server`.
-The Dockerfile and compose file were not built in this environment.
+The Docker image was built and run against a local Redis: `/health` answered and a signed event got `202`.
+The compose file was not run.
+
+## Deploy (free)
+
+A **Render free web service** (from the `Dockerfile`) plus a **Render free Key Value** instance
+(Redis-compatible, `noeviction` as BullMQ requires). `render.yaml` wires `REDIS_URL` between them
+and generates `OUTBOUND_SECRET` and `ADMIN_KEY`. In Render: New, Blueprint, pick this repo, then set
+`SIGNING_SECRETS` and `TARGET_URLS` when prompted.
+
+- Free web instances sleep after about 15 minutes idle; a sender retrying on timeout will wake it.
+- Free Key Value has no persistence, so queued retries are lost if it restarts. Demo only.
 
 ## Known limits
 
