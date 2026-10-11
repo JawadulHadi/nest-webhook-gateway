@@ -1,0 +1,30 @@
+# Render Blueprint: free web service plus a free Key Value (Redis-compatible) instance.
+# Free web instances sleep after ~15 minutes idle. Free Key Value has no persistence,
+# so queued retries are lost if it restarts. Fine for a demo, not for production.
+services:
+  - type: web
+    name: nest-webhook-gateway
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: webhook-gateway-redis
+          property: connectionString
+      - key: SIGNING_SECRETS
+        sync: false
+      - key: TARGET_URLS
+        sync: false
+      - key: OUTBOUND_SECRET
+        generateValue: true
+      - key: ADMIN_KEY
+        generateValue: true
+  - type: keyvalue
+    name: webhook-gateway-redis
+    plan: free
+    # BullMQ requires that Redis never evicts its keys.
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
