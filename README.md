@@ -91,6 +91,9 @@ then set `SIGNING_SECRETS` and `TARGET_URLS` when prompted. The full guide, incl
 stays on Render rather than Vercel (the BullMQ worker must stay running between requests), is in
 [docs/deployment.md](docs/deployment.md).
 
+A stateless demo of the HTTP API also runs on Vercel at <https://nest-webhook-gateway.vercel.app>
+(in-memory queue, no forwarding, so delayed retries don't survive there).
+
 - Free web instances sleep after about 15 minutes idle; a sender retrying on timeout will wake it.
 - Free Key Value has no persistence, so queued retries are lost if it restarts. Demo only.
 

@@ -8,13 +8,29 @@ Value** instance as its Redis. `render.yaml` is the blueprint for both.
 | HTTP API + BullMQ worker | One Render free web service (Docker) | `Dockerfile`, `render.yaml` |
 | Queue | Render free Key Value (Redis-compatible), `maxmemoryPolicy: noeviction` | `render.yaml` |
 
-## Why not Vercel
+## Vercel: stateless demo only
 
-The other proof repos deploy to Vercel; this one doesn't fit it. The BullMQ `Worker` in
-`src/queue.ts` runs in the same process as the API and must stay alive to pick up retries scheduled
-seconds to a minute later (`BACKOFF_CAP_MS`). Vercel Functions only run while handling a request, so
-a delayed retry would sit in Redis with nothing to consume it. Moving it to Vercel would mean
-replacing BullMQ with a push-based queue, which is a different design rather than a deploy change.
+The full design (API plus a long-lived BullMQ worker) runs on Render, below. Vercel hosts a demo of
+the HTTP side at <https://nest-webhook-gateway.vercel.app> so the API can be tried without a server:
+
+- `vercel.json` selects the NestJS preset, which wraps `src/main.ts` in a function.
+- `REDIS_URL` is **not** set there, so the gateway uses the in-memory queue and idempotency store.
+  Signature checks, replay protection and idempotency within one warm instance work. Delayed
+  retries do not: Vercel Functions only run while handling a request, so a retry scheduled for
+  later is lost when the instance freezes. That is why the real deployment stays on Render.
+- `TARGET_URLS` is empty, so verified events are accepted but not forwarded anywhere.
+- Set in the Vercel project (Settings → Environment Variables, Production and Preview):
+  `SIGNING_SECRETS` (for example `{"demo":"<long random string>"}`), `ADMIN_KEY` and
+  `OUTBOUND_SECRET`. Without `SIGNING_SECRETS` the app refuses to start.
+
+Smoke test:
+
+```bash
+curl https://nest-webhook-gateway.vercel.app/health
+```
+
+Moving the whole gateway to Vercel would mean replacing BullMQ with a push-based queue, which is a
+different design rather than a deploy change.
 
 ## Render
 

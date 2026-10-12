@@ -154,5 +154,7 @@ describe('webhook gateway', () => {
     ctx = await setup({ adminKey: '' });
     await request(ctx.app.getHttpServer()).get('/deliveries').set('x-admin-key', '').expect(403);
     await request(ctx.app.getHttpServer()).get('/health').expect(200);
+    const index = await request(ctx.app.getHttpServer()).get('/').expect(200);
+    expect(index.body.endpoints).toContain('GET /health');
   });
 });

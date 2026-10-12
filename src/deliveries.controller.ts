@@ -21,6 +21,15 @@ export class AdminGuard implements CanActivate {
 export class DeliveriesController {
   constructor(@Inject('DELIVERY_STORE') private store: DeliveryStore) {}
 
+  @Get()
+  index() {
+    return {
+      name: 'nest-webhook-gateway',
+      source: 'https://github.com/JawadulHadi/nest-webhook-gateway',
+      endpoints: ['POST /webhooks/:source', 'GET /health', 'GET /deliveries (x-admin-key)'],
+    };
+  }
+
   @Get('health')
   health() {
     return { status: 'ok' };
