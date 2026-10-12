@@ -19,14 +19,21 @@ the HTTP side at <https://nest-webhook-gateway.vercel.app> so the API can be tri
   retries do not: Vercel Functions only run while handling a request, so a retry scheduled for
   later is lost when the instance freezes. That is why the real deployment stays on Render.
 - `TARGET_URLS` is empty, so verified events are accepted but not forwarded anywhere.
-- Set in the Vercel project (Settings → Environment Variables, Production and Preview):
-  `SIGNING_SECRETS` (for example `{"demo":"<long random string>"}`), `ADMIN_KEY` and
-  `OUTBOUND_SECRET`. Without `SIGNING_SECRETS` the app refuses to start.
+- No variables are required there. When `SIGNING_SECRETS` is unset and `VERCEL` is set,
+  `src/main.ts` falls back to one source, `demo`, with the deliberately public secret
+  `public-demo-secret`, so anyone can sign a test event. Everywhere else an empty
+  `SIGNING_SECRETS` still stops the app at startup. `ADMIN_KEY` is unset too, which disables
+  `/deliveries`; set it in the Vercel project to inspect deliveries.
 
 Smoke test:
 
 ```bash
 curl https://nest-webhook-gateway.vercel.app/health
+
+BODY='{"id":"evt_1","amount":5}'; TS=$(date +%s)
+SIG="sha256=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac 'public-demo-secret' | cut -d' ' -f2)"
+curl -i https://nest-webhook-gateway.vercel.app/webhooks/demo -H "content-type: application/json" \
+  -H "x-timestamp: $TS" -H "x-signature: $SIG" -H "x-event-id: evt_1" -d "$BODY"
 ```
 
 Moving the whole gateway to Vercel would mean replacing BullMQ with a push-based queue, which is a
