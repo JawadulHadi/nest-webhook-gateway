@@ -9,6 +9,12 @@ Every change adds an entry under **Unreleased** in the same pull request. CI che
 ## [Unreleased]
 
 ### Added
+- Stateless Vercel demo: `vercel.json` selects the NestJS preset, and `GET /` lists the endpoints
+  so the root URL no longer returns 404. Without `REDIS_URL` it runs on the in-memory queue, so
+  delayed retries don't survive there; the full deployment stays on Render.
+  On Vercel only, an unset `SIGNING_SECRETS` falls back to a deliberately public demo secret
+  for source `demo`, so the demo needs no variables. `docs/deployment.md` explains the
+  trade-off.
 - `docs/deployment.md`: the Render blueprint step by step, the free-tier limits, and why this repo
   stays on Render instead of Vercel (the BullMQ worker has to keep running between requests).
 - `CHANGELOG.md` (this file), a pull request template, and a CI job that fails a pull request

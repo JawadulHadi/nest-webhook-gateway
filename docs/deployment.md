@@ -8,13 +8,36 @@ Value** instance as its Redis. `render.yaml` is the blueprint for both.
 | HTTP API + BullMQ worker | One Render free web service (Docker) | `Dockerfile`, `render.yaml` |
 | Queue | Render free Key Value (Redis-compatible), `maxmemoryPolicy: noeviction` | `render.yaml` |
 
-## Why not Vercel
+## Vercel: stateless demo only
 
-The other proof repos deploy to Vercel; this one doesn't fit it. The BullMQ `Worker` in
-`src/queue.ts` runs in the same process as the API and must stay alive to pick up retries scheduled
-seconds to a minute later (`BACKOFF_CAP_MS`). Vercel Functions only run while handling a request, so
-a delayed retry would sit in Redis with nothing to consume it. Moving it to Vercel would mean
-replacing BullMQ with a push-based queue, which is a different design rather than a deploy change.
+The full design (API plus a long-lived BullMQ worker) runs on Render, below. Vercel hosts a demo of
+the HTTP side at <https://nest-webhook-gateway.vercel.app> so the API can be tried without a server:
+
+- `vercel.json` selects the NestJS preset, which wraps `src/main.ts` in a function.
+- `REDIS_URL` is **not** set there, so the gateway uses the in-memory queue and idempotency store.
+  Signature checks, replay protection and idempotency within one warm instance work. Delayed
+  retries do not: Vercel Functions only run while handling a request, so a retry scheduled for
+  later is lost when the instance freezes. That is why the real deployment stays on Render.
+- `TARGET_URLS` is empty, so verified events are accepted but not forwarded anywhere.
+- No variables are required there. When `SIGNING_SECRETS` is unset and `VERCEL` is set,
+  `src/main.ts` falls back to one source, `demo`, with the deliberately public secret
+  `public-demo-secret`, so anyone can sign a test event. Everywhere else an empty
+  `SIGNING_SECRETS` still stops the app at startup. `ADMIN_KEY` is unset too, which disables
+  `/deliveries`; set it in the Vercel project to inspect deliveries.
+
+Smoke test:
+
+```bash
+curl https://nest-webhook-gateway.vercel.app/health
+
+BODY='{"id":"evt_1","amount":5}'; TS=$(date +%s)
+SIG="sha256=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac 'public-demo-secret' | cut -d' ' -f2)"
+curl -i https://nest-webhook-gateway.vercel.app/webhooks/demo -H "content-type: application/json" \
+  -H "x-timestamp: $TS" -H "x-signature: $SIG" -H "x-event-id: evt_1" -d "$BODY"
+```
+
+Moving the whole gateway to Vercel would mean replacing BullMQ with a push-based queue, which is a
+different design rather than a deploy change.
 
 ## Render
 
