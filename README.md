@@ -86,9 +86,10 @@ The compose file was not run.
 ## Deploy (free)
 
 A **Render free web service** (from the `Dockerfile`) plus a **Render free Key Value** instance
-(Redis-compatible, `noeviction` as BullMQ requires). `render.yaml` wires `REDIS_URL` between them
-and generates `OUTBOUND_SECRET` and `ADMIN_KEY`. In Render: New, Blueprint, pick this repo, then set
-`SIGNING_SECRETS` and `TARGET_URLS` when prompted.
+(Redis-compatible, `noeviction` as BullMQ requires). In Render: New, Blueprint, pick this repo,
+then set `SIGNING_SECRETS` and `TARGET_URLS` when prompted. The full guide, including why this repo
+stays on Render rather than Vercel (the BullMQ worker must stay running between requests), is in
+[docs/deployment.md](docs/deployment.md).
 
 - Free web instances sleep after about 15 minutes idle; a sender retrying on timeout will wake it.
 - Free Key Value has no persistence, so queued retries are lost if it restarts. Demo only.
@@ -99,5 +100,17 @@ and generates `OUTBOUND_SECRET` and `ADMIN_KEY`. In Render: New, Blueprint, pick
 - No per-target secrets or per-source target routing yet, and no payload size limit beyond Express's default.
 - A delivery counts as an attempt only after the HTTP call, a crash mid-call can cause a duplicate delivery
   (at-least-once). Targets must be idempotent.
+
+## Changelog and contributing
+
+Every change adds an entry under **Unreleased** in [`CHANGELOG.md`](CHANGELOG.md) and updates the
+docs it affects (this README, `docs/`, and `NOTES.md` for mistakes). A CI job fails any pull request
+that skips the changelog (label it `skip-changelog` for changes that truly need none). Before
+opening a PR:
+
+```bash
+npm run typecheck && npm test
+npm run test:redis   # needs a local Redis
+```
 
 See `NOTES.md` for mistakes made and fixed.
